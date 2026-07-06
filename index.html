@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deepfake கண்டறியும் தளம்</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #f0f4f8;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 420px;
+            text-align: center;
+        }
+        h2 { color: #1e293b; margin-bottom: 10px; font-size: 24px; }
+        .subtitle { color: #64748b; font-size: 14px; margin-bottom: 25px; }
+        
+        /* அப்லோடு பாக்ஸ் ஸ்டைல் */
+        .upload-box {
+            border: 2px dashed #cbd5e1;
+            padding: 30px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            background-color: #f8fafc;
+            transition: all 0.3s ease;
+        }
+        .upload-box:hover {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .upload-box p { margin: 0; color: #64748b; font-size: 15px; }
+        
+        #imagePreview {
+            max-width: 100%;
+            max-height: 180px;
+            margin-top: 15px;
+            border-radius: 8px;
+            display: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        
+        /* பட்டன் ஸ்டைல் */
+        button {
+            margin-top: 20px;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #2563eb; }
+        
+        /* ரிசல்ட் காட்டும் இடம் */
+        #resultContainer {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .real { background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
+        .fake { background-color: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+        
+        #loading { display: none; color: #3b82f6; margin-top: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🛡️ Deepfake Detection Portal</h2>
+    <p class="subtitle">புகைப்படத்தை அப்லோடு செய்து அது உண்மையா அல்லது போலியா என கண்டறியவும்.</p>
+    
+    <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+        <p>இங்கே கிளிக் செய்து புகைப்படத்தை தேர்ந்தெடுக்கவும்</p>
+        <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="previewImage(event)">
+        <center><img id="imagePreview" alt="Preview"></center>
+    </div>
+
+    <button onclick="uploadAndPredict()">பரிசோதிக்கவும் (Analyze)</button>
+
+    <div id="loading">பரிசோதிக்கப்படுகிறது... சற்று காத்திருக்கவும்...</div>
+    <div id="resultContainer"></div>
+</div>
+
+<script>
+    // தேர்ந்தெடுத்த இமேஜை ஸ்கிரீனில் காட்டுவதற்கான பங்க்ஷன்
+    function previewImage(event) {
+        const reader = new FileReader();
+        reader.onload = function(){
+            const output = document.getElementById('imagePreview');
+            output.src = reader.result;
+            output.style.display = 'block';
+        };
+        reader.readAsDataURL(event.target.files[0]);
+        document.getElementById('resultContainer').style.display = 'none';
+    }
+
+    // பேக்கெண்டிற்கு (Flask) டேட்டாவை அனுப்பும் பங்க்ஷன்
+    async function uploadAndPredict() {
+        const fileInput = document.getElementById('fileInput');
+        const resultContainer = document.getElementById('resultContainer');
+        const loading = document.getElementById('loading');
+        
+        if (fileInput.files.length === 0) {
+            alert("தயவுசெய்து ஒரு புகைப்படத்தை முதலில் தேர்ந்தெடுக்கவும்!");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        // லோடிங் ஸ்டேட்டைக் காட்டுதல்
+        loading.style.display = 'block';
+        resultContainer.style.display = 'none';
+
+        try {
+            const response = await fetch('/predict', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            loading.style.display = 'none';
+
+            if (data.error) {
+                alert("பிழை: " + data.error);
+                return;
+            }
+
+            // ரிசல்ட்டை ஸ்கிரீனில் காட்டுதல்
+            resultContainer.innerHTML = `${data.result} <br> <span style="font-size:13px; font-weight:normal; color:#475569;">உறுதித்தன்மை (Confidence): ${data.confidence}</span>`;
+            resultContainer.style.display = 'block';
+
+            if (data.status === "real") {
+                resultContainer.className = "real";
+            } else {
+                resultContainer.className = "fake";
+            }
+
+        } catch (error) {
+            loading.style.display = 'none';
+            alert("பரிசோதிப்பதில் ஏதோ தவறு நடந்துள்ளது.");
+            console.error(error);
+        }
+    }
+</script>
+
+</body>
+</html>
